@@ -5,8 +5,9 @@ ServicePortSerial sp;
 byte isCommunicating = 0;//this is the first digit of the communication. MOST IMPORTANT ONE
 enum gameModes {ASSEMBLE, GAME};//so these only occur when isCommunicating is false
 byte gameMode = ASSEMBLE;
-byte faceComm[6] = {0, 0, 0, 0, 0, 0}; //used to ask for and transmit face data during communication mode
+byte faceComm[6] = {0, 0, 0, 0, 0, 0}; //used to transmit face data during communication mode
 byte colorComm[6] = {0, 0, 0, 0, 0, 0}; //used to transmit color data during communication and game mode
+byte requestFace = 0;
 
 ///ALGORITHM VARIABLES////
 byte piecesPlaced = 0;
@@ -64,28 +65,28 @@ void assembleLoop() {
   }
 
   if (buttonDoubleClicked() && canBeginAlgorithm == true) {//this lets us become the master blink
+    makePuzzle();//RUN THE ALGORITHM
+    FOREACH_FACE(f) {
+      faceComm[f] = 0;//setting all to communicate face 0
+      colorComm[f] = colorsArr[f][0];//setting whatever the face 0 color for each face is
+    }
     isCommunicating = 1;
     canBeginAlgorithm = false;
     isMaster = true;
-    makePuzzle();//RUN THE ALGORITHM
   }
 
   FOREACH_FACE(f) {//here we listen for other blinks to turn us into receiver blinks
-    if (!isValueReceivedOnFaceExpired(f)) {
+    if (!isValueReceivedOnFaceExpired(f)) {//neighbor here
       byte neighborData = getLastValueReceivedOnFace(f);
-      if (getCommMode(neighborData) == 1) { //a neighbor is in comm mode
-        if (getFaceNum(neighborData) == 0) { //that neighbor is communicating face 0 (only the master does this);
-          //we must move to comm mode and set our face communicated to 1
-          isCommunicating = 1;
-          faceComm[f] = 1;
-          masterFace = f;
-          faceColors[0] = getColorInfo(neighborData);
-        }
+      if (getCommMode(neighborData) == 1) { //this neighbor is in comm mode (is master)
+        isCommunicating = 1;//we are now communicating
+        masterFace = f;//will only listen to communication on this face
+        requestFace = 0;
       }
     }
   }
 
-  //the last thing we do is communicate our state. All 0s for this state. Changes after transition
+  //the last thing we do is communicate our state. All 0s for now, changes later
   setValueSentOnAllFaces(0);
 }
 
@@ -108,27 +109,39 @@ void gameLoop() {
   //all we do here is look at our faces and see if they are touching like colors
   FOREACH_FACE(f) {
     if (!isValueReceivedOnFaceExpired(f)) { //neighbor!
-      byte neighborColor = getLastValueReceivedOnFace(f) & 3;//bitwise operator, only gives us the 5th and 6th bits (color)
+      byte neighborData = getLastValueReceivedOnFace(f);
+      byte neighborColor = getColorInfo(neighborData);
       if (neighborColor == faceColors[f]) { //hey, a match!
         faceBrightness[f] = 255;
       } else {//no match :(
         faceBrightness[f] = dimVal;
       }
+
+      //look for neighbors in assemble
+      if (getCommMode(neighborData) == 0 && getGameMode(getLastValueReceivedOnFace(f)) == ASSEMBLE) {
+        gameMode = ASSEMBLE;
+      }
+
     } else {//no neighbor
       faceBrightness[f] = dimVal;
     }
   }
 
+  //if we are double clicked, we go to assemble mode
+  if (buttonDoubleClicked()) {
+    gameMode = ASSEMBLE;
+  }
+
   //set communications
-  FOREACH_FACE(f) {
-    byte sendData = (isCommunicating << 5) + (gameMode << 4) + (faceColors[f]);//comm, game mode, two empty bits, color
+  FOREACH_FACE(f) {//[COMM][MODE][----][----][COLR][COLR]
+    byte sendData = (isCommunicating << 5) + (gameMode << 4) + (faceColors[f]);
     setValueSentOnFace(sendData, f);
   }
 }
 
 void gameDisplay() {
   FOREACH_FACE(f) {
-    byte displayColor = displayColors[faceColors[f]];
+    Color displayColor = displayColors[faceColors[f]];
     byte displayBrightness = faceBrightness[f];
     setColorOnFace(dim(displayColor, displayBrightness), f);
   }
@@ -152,18 +165,14 @@ void communicationMasterLoop() {
     if (!isValueReceivedOnFaceExpired(f)) { //someone is here
       byte requestData = getLastValueReceivedOnFace(f);
 
-      if (getCommMode(requestData) == 0) {//this neighbor is still waiting. Show them face 0 until they catch on
+      if (getCommMode(requestData) == 0 && getGameMode(requestData) == ASSEMBLE) {//this neighbor is still waiting. Show them face 0 until they catch on
         faceComm[f] = neighborsArr[f][0];
         colorComm[f] = colorsArr[f][0];
       }
 
       if (getCommMode(requestData) == 1) {//this neighbor is ready for communication
         faceComm[f] = getFaceNum(requestData);//this is the face it wants info about
-        if (faceComm[f] == 6) { //complete neighbor, no updates needed
-          completeNeighbors++;
-        } else {
-          colorComm[f] = colorsArr[f][faceComm[f]];//the color for that face of that blink
-        }
+        colorComm[f] = colorsArr[f][faceComm[f]];//the color for that face of that blink
       }//end communication ready check
     }//end neighbor talk
 
@@ -175,11 +184,19 @@ void communicationMasterLoop() {
     }//end missing face check
   }//end request check loop
 
-
-  if (completeNeighbors == 5) {//so all of our neighbors are complete with data. Go to game mode!
+  byte neighborsInGameMode = 0;
+  FOREACH_FACE(f) { //check for neighbors in game mode
+    if (!isValueReceivedOnFaceExpired(f)) {
+    byte neighborData = getLastValueReceivedOnFace(f);
+      if (getCommMode(neighborData) == 0 && getGameMode(neighborData) == GAME) {
+        neighborsInGameMode++;
+      }
+    }
+  }
+  if(neighborsInGameMode >= 5){//it should never be >, but for safety...
     isCommunicating = 0;
-    isMaster = false;
     gameMode = GAME;
+    isMaster = false;
   }
 
   FOREACH_FACE(f) {
@@ -187,33 +204,25 @@ void communicationMasterLoop() {
     byte sendData = (isCommunicating << 5) + (faceComm[f] << 2) + (colorComm[f]);
     setValueSentOnFace(sendData, f);
   }
-
-  //print the faceComms array because what the fuck is happening
-  sp.print(faceComm[0]);
-  sp.print(faceComm[1]);
-  sp.print(faceComm[2]);
-  sp.print(faceComm[3]);
-  sp.print(faceComm[4]);
-  sp.println(faceComm[5]);
 }
 
 void communicationReceiverLoop() {
   //so the trick here is to only listen to the master face
   byte receivedData = getLastValueReceivedOnFace(masterFace);
-  if (faceComm[masterFace] == 6) { //we are done looking for data. Wait for the master to go to game mode, then do the same
-    if (getCommMode(receivedData) == 0) { //a transition back to game mode has occured
-      isCommunicating = 0;
-      gameMode = GAME;
-      setColor(GREEN);//FOR TESTING
+  if (getCommMode(receivedData) == 1) { //we are still in the communication phase of the game
+    if (getFaceNum(receivedData) == requestFace) { //we are being told info about our requested face
+      faceColors[requestFace] = getColorInfo(receivedData);//take the color info, put it in the correct face
+      requestFace ++;
     }
-  } else if (getFaceNum(receivedData) == faceComm[masterFace]) { //the master is showing the data for our requested face
-    //take the color data, then update our request
-    faceColors[getFaceNum(receivedData)] = getColorInfo(receivedData);
-    faceComm[masterFace]++;
-  }//if they don't match, we just gotta wait until the master catches up
+  }
+
+  if (requestFace == 6) { //we have everything!
+    isCommunicating = 0;
+    gameMode = GAME;
+  }
 
   //now we update our communication
-  byte sendData = (isCommunicating << 5) + (faceComm[masterFace] << 2);//no color
+  byte sendData = (isCommunicating << 5) + (requestFace << 2);//[COMM][FACE][FACE][FACE][----][----]
   setValueSentOnFace(sendData, masterFace); //we only communicate on this face. All others are 0 still
 }
 
@@ -222,18 +231,26 @@ byte getCommMode(byte data) {
 }
 
 byte getFaceNum(byte data) {
-  return ((data >> 2) & 7);//returns the 2nd through 4th bit
+  return ((data >> 2) & 7);//returns the 2nd, 3rd, and 4th bit
 }
 
 byte getColorInfo(byte data) {
   return (data & 3);//returns the 5th and 6th bits
 }
 
-Color countdownColors[7] = {OFF, RED, ORANGE, YELLOW, GREEN, BLUE, WHITE};
+byte getGameMode(byte data) {
+  return ((data >> 4) & 1);
+}
+
 void communicationDisplay() {
-  //so I'm gonna use this to kinda debug stuff
-  FOREACH_FACE(f) {
-    setColorOnFace(countdownColors[faceComm[f]], f);//just shows me the face it's asking for/giving
+  if (isMaster) {
+    setColor(WHITE);
+  } else {
+    FOREACH_FACE(f) {
+      if (f < requestFace) {
+        setColorOnFace(WHITE, f);
+      }
+    }
   }
 }
 
