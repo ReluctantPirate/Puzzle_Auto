@@ -19,15 +19,16 @@ byte colorsArr[6][6];//filled with 0-3, denotes color of connection. [x][y] x is
 bool canBeginAlgorithm = false;
 bool isMaster = false;
 byte masterFace = 0;//for receivers, this is the face where the master was found
+Timer sparkleTimer;
 
+////GAME VARIABLES////
 Color displayColors[5] = {OFF, RED, YELLOW, BLUE, WHITE};
 byte faceColors[6] = {0, 0, 0, 0, 0, 0};
 byte faceBrightness[6] = {0, 0, 0, 0, 0, 0};
 byte dimVal = 25;
-Timer sparkleTimer;
+
 
 void setup() {
-  // put your setup code here, to run once:
   sp.begin();
 }
 
@@ -80,6 +81,7 @@ void assembleLoop() {
       byte neighborData = getLastValueReceivedOnFace(f);
       if (getCommMode(neighborData) == 1) { //this neighbor is in comm mode (is master)
         isCommunicating = 1;//we are now communicating
+        gameMode = GAME;//not immediately important, but will come into play later
         masterFace = f;//will only listen to communication on this face
         requestFace = 0;
       }
@@ -87,7 +89,8 @@ void assembleLoop() {
   }
 
   //the last thing we do is communicate our state. All 0s for now, changes later
-  setValueSentOnAllFaces(0);
+  byte sendData = (isCommunicating << 5) + (gameMode << 4);
+  setValueSentOnAllFaces(sendData);
 }
 
 void assembleDisplay() {
@@ -187,15 +190,15 @@ void communicationMasterLoop() {
   byte neighborsInGameMode = 0;
   FOREACH_FACE(f) { //check for neighbors in game mode
     if (!isValueReceivedOnFaceExpired(f)) {
-    byte neighborData = getLastValueReceivedOnFace(f);
+      byte neighborData = getLastValueReceivedOnFace(f);
       if (getCommMode(neighborData) == 0 && getGameMode(neighborData) == GAME) {
         neighborsInGameMode++;
       }
     }
   }
-  if(neighborsInGameMode >= 5){//it should never be >, but for safety...
+  if (neighborsInGameMode >= 5) { //it should never be >, but for safety...
     isCommunicating = 0;
-    gameMode = GAME;
+    gameMode = GAME;//redundant technically, but leaving for now
     isMaster = false;
   }
 
