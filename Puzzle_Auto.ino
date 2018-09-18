@@ -267,6 +267,7 @@ void makePuzzle() {
   fillOuterLayer();
   colorConnections();
   //that does it!
+  printAll();
 }
 
 void resetAll() {
@@ -355,21 +356,21 @@ void fillFirstLayer() {
       //at this stage, we examine both neighbors of the f face
       //and evaluate them in a similar way as above
       //starting with the counterclockwise face
-      if (neighborsArr[0][nextCounterclockwise(f)] != 7) { //there is something there
+      if (neighborsArr[0][nextCounterclockwise(f)] != NONEIGHBOR) { //there is something there
         //to fully make this connection, we need to inform BOTH blinks about this new connection
         neighborsArr[indexOfRingBlink][nextClockwise(getNeighborFace(f))] = neighborsArr[0][nextCounterclockwise(f)];//place the connection into the ringBlink
-      } else if (neighborsArr[0][nextCounterclockwise(f)] == 7) { //it is a NONEIGHBOR space
+      } else if (neighborsArr[0][nextCounterclockwise(f)] == NONEIGHBOR) { //it is a NONEIGHBOR space
         //to place this connection, we need to put it in the Clockwise next face of the neighboring face to f
-        neighborsArr[indexOfRingBlink][nextClockwise(getNeighborFace(f))] = 7;
+        neighborsArr[indexOfRingBlink][nextClockwise(getNeighborFace(f))] = NONEIGHBOR;
       }
 
       //now  the clockwise face
-      if (neighborsArr[0][nextClockwise(f)] != 7) { //there is something there
+      if (neighborsArr[0][nextClockwise(f)] != NONEIGHBOR) { //there is something there
         //to fully make this connection, we need to inform BOTH blinks about this new connection
         neighborsArr[indexOfRingBlink][nextCounterclockwise(getNeighborFace(f))] = neighborsArr[0][nextClockwise(f)];//place the connection into the ringBlink
-      } else if (neighborsArr[0][nextClockwise(f)] == 7) { //it is a NONEIGHBOR space
+      } else if (neighborsArr[0][nextClockwise(f)] == NONEIGHBOR) { //it is a NONEIGHBOR space
         //to place this connection, we need to put it in the Clockwise next face of the neighboring face to f
-        neighborsArr[indexOfRingBlink][nextCounterclockwise(getNeighborFace(f))] = 7;
+        neighborsArr[indexOfRingBlink][nextCounterclockwise(getNeighborFace(f))] = NONEIGHBOR;
       }
     }
   }//end of ring face loop
