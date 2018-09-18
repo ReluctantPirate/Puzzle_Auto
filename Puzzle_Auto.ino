@@ -45,6 +45,10 @@ void loop() {
       gameDisplay();
     }
   }
+
+  // clean button presses
+  buttonPressed();
+  buttonDoubleClicked();
 }
 
 void assembleLoop() {
@@ -210,12 +214,16 @@ void communicationMasterLoop() {
 }
 
 void communicationReceiverLoop() {
+  // if button pressed, advance the face we are asking for
+  if ( buttonPressed() ) {
+    requestFace ++;
+  }
+
   //so the trick here is to only listen to the master face
   byte receivedData = getLastValueReceivedOnFace(masterFace);
   if (getCommMode(receivedData) == 1) { //we are still in the communication phase of the game
     if (getFaceNum(receivedData) == requestFace) { //we are being told info about our requested face
       faceColors[requestFace] = getColorInfo(receivedData);//take the color info, put it in the correct face
-      requestFace ++;
     }
   }
 
@@ -249,9 +257,15 @@ void communicationDisplay() {
   if (isMaster) {
     setColor(WHITE);
   } else {
+    // display ORANGE if waiting
+    // display color if received
     FOREACH_FACE(f) {
       if (f < requestFace) {
-        setColorOnFace(WHITE, f);
+        Color displayColor = displayColors[faceColors[f]];
+        setColorOnFace(displayColor, f);
+      }
+      else {
+        setColorOnFace(ORANGE, f);
       }
     }
   }
