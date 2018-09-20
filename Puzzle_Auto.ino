@@ -262,7 +262,7 @@ void communicationDisplay() {
   if (isMaster) {
     setColor(WHITE);
   } else {
-    // display ORANGE if waiting
+    // display WHITE if waiting
     // display color if received
     FOREACH_FACE(f) {
       if (f < requestFace) {
@@ -270,7 +270,7 @@ void communicationDisplay() {
         setColorOnFace(displayColor, f);
       }
       else {
-        setColorOnFace(ORANGE, f);
+        setColorOnFace(WHITE, f);
       }
     }
   }
@@ -282,11 +282,35 @@ void communicationDisplay() {
 
 void makePuzzle() {
   resetAll();
-  fillFirstLayer();
-  fillOuterLayer();
+  piecesPlaced++;//this symbolically places the first blink in the center
+  //place 2-4 NONEIGHBORS in first ring
+  byte emptySpots = rand(2) + 2;//this is how many NONEIGHBORS we're putting in
+  FOREACH_FACE(f) {
+    if (f < emptySpots) {
+      neighborsArr[0][f] = NONEIGHBOR;
+    }
+  }
+
+  for (int j = 0; j < 12; j++) {//quick shuffle method, random enough for our needs
+    byte swapA = rand(5);
+    byte swapB = rand(5);
+    byte temp = neighborsArr[0][swapA];
+    neighborsArr[0][swapA] = neighborsArr[0][swapB];
+    neighborsArr[0][swapB] = temp;
+  }
+
+  //place blinks in remainings open spots
+  for (byte j = 0; j < 6 - emptySpots; j++) {
+    addBlink(0, 0);
+  }
+
+  byte remainingBlinks = 6 - piecesPlaced;
+  byte lastRingBlinkIndex = piecesPlaced - 1;
+  for (byte k = 0; k < remainingBlinks; k++) {
+    addBlink(1, lastRingBlinkIndex);
+  }
   colorConnections();
   //that does it!
-  printAll();
 }
 
 void resetAll() {
@@ -308,105 +332,10 @@ void resetAll() {
   }
 }
 
-void fillFirstLayer() {
-  //so this is a tricky function
-  //it fills the layer around pieceA, which is in the "center" from the algorithm's perspective
-  //it actually all operates inside of a face loop, because it only does 5 operations (6 never gets blinks because symmetry)
-  //first, we "place" the center piece
-  piecesPlaced++;
-  FOREACH_FACE(f) {
-    bool placingPiece = false;
-    switch (f) {//each face has slightly different logic
-      case 0:
-        //always place B here
-        placingPiece = true;
-        break;
-      case 1:
-        //here we have a 7/10 chance of filling the face. Easy check
-        if (rand(9) < 7) {//place a face!
-          placingPiece = true;
-        }
-        break;
-      case 2:
-        //here we have a 5/10 chance of filling the face. Easy check
-        if (rand(9) < 5) {//place a face!
-          placingPiece = true;
-        }
-        break;
-      case 3:
-        //here we have a 4/10 chance of filling the face. Easy check
-        if (rand(9) < 4) {//place a face!
-          placingPiece = true;
-        }
-        break;
-      case 4:
-        //so this is the tricky one
-        if (piecesPlaced == 2) { //We have only placed two pieces (center and one other), we MUST place one here
-          placingPiece = true;
-        } else if (piecesPlaced == 5) { //We have placed 5 pieces in total already, we can't place one here
-          //placingPiece remains false
-        } else {//We have placed 3 or 4 pieces, 4/10 chance
-          if (rand(9) < 4) {//place a face!
-            placingPiece = true;
-          }
-        }
-        break;
-      case 5:
-        //placingPiece remains false
-        break;
-    }
-
-    //now that we've decided whether or not to place a face, let's do it!
-    if (placingPiece) {
-      neighborsArr[0][f] = getCurrentPiece();
-      piecesPlaced++;
-      //now we need to tell B that it has a neighbor
-      neighborsArr[piecesPlaced - 1][getNeighborFace(f)] = APIECE;
-    } else {//decided not to place a piece
-      neighborsArr[0][f] = NONEIGHBOR;
-    }
-  }//end of face loop
-
-  //so we've placed out first ring. Now we need them each to understand who their lateral neighbors are
-  //for this, we need to go to each one that is occupied, and inquire with the central blink about the neighbors
-  FOREACH_FACE(f) {
-    if (neighborsArr[0][f] != NONEIGHBOR) { //this means there is a blink on this face of the central blink
-      byte indexOfRingBlink = neighborsArr[0][f] - 1;//the BPIECE is enumed as 2, but its index in the array is 1, and so on
-      //at this stage, we examine both neighbors of the f face
-      //and evaluate them in a similar way as above
-      //starting with the counterclockwise face
-      if (neighborsArr[0][nextCounterclockwise(f)] != NONEIGHBOR) { //there is something there
-        //to fully make this connection, we need to inform BOTH blinks about this new connection
-        neighborsArr[indexOfRingBlink][nextClockwise(getNeighborFace(f))] = neighborsArr[0][nextCounterclockwise(f)];//place the connection into the ringBlink
-      } else if (neighborsArr[0][nextCounterclockwise(f)] == NONEIGHBOR) { //it is a NONEIGHBOR space
-        //to place this connection, we need to put it in the Clockwise next face of the neighboring face to f
-        neighborsArr[indexOfRingBlink][nextClockwise(getNeighborFace(f))] = NONEIGHBOR;
-      }
-
-      //now  the clockwise face
-      if (neighborsArr[0][nextClockwise(f)] != NONEIGHBOR) { //there is something there
-        //to fully make this connection, we need to inform BOTH blinks about this new connection
-        neighborsArr[indexOfRingBlink][nextCounterclockwise(getNeighborFace(f))] = neighborsArr[0][nextClockwise(f)];//place the connection into the ringBlink
-      } else if (neighborsArr[0][nextClockwise(f)] == NONEIGHBOR) { //it is a NONEIGHBOR space
-        //to place this connection, we need to put it in the Clockwise next face of the neighboring face to f
-        neighborsArr[indexOfRingBlink][nextCounterclockwise(getNeighborFace(f))] = NONEIGHBOR;
-      }
-    }
-  }//end of ring face loop
-}
-
-void fillOuterLayer() {
-  byte piecesRemaining = 6 - piecesPlaced;
-  byte sendingIndex = piecesPlaced - 1;
-  for (byte i = 0; i < piecesRemaining; i++) {//this adds as many blinks as are remaining
-    addOuterBlink(sendingIndex);
-  }
-}
-
-void addOuterBlink(byte maxSearchIndex) {
+void addBlink(byte minSearchIndex, byte maxSearchIndex) {
   //we begin by evaluating how many eligible spots remain
   byte eligiblePositions = 0;
-  for (byte i = 1; i <= maxSearchIndex; i++) {//so here we look through each of the pieces in the first ring
+  for (byte i = minSearchIndex; i <= maxSearchIndex; i++) {
     FOREACH_FACE(f) {
       if (neighborsArr[i][f] == 0) { //this is an eligible spot
         eligiblePositions ++;
@@ -420,7 +349,7 @@ void addOuterBlink(byte maxSearchIndex) {
   byte faceIndex;
   //now determine which blink this is coming off of
   byte positionCountdown = 0;
-  for (byte i = 1; i <= maxSearchIndex; i++) {//same loop as above
+  for (byte i = minSearchIndex; i <= maxSearchIndex; i++) {//same loop as above
     FOREACH_FACE(f) {
       if (neighborsArr[i][f] == 0) { //this is an eligible spot
         positionCountdown ++;
@@ -524,33 +453,33 @@ byte getCurrentPiece () {
   }
 }
 
-void printAll() {
-  //print the connection array
-  sp.println();
-  FOREACH_FACE(f) {
-    sp.print("Piece ");
-    sp.print(f + 1);
-    sp.print(" ");
-    sp.print(neighborsArr[f][0]);
-    sp.print(neighborsArr[f][1]);
-    sp.print(neighborsArr[f][2]);
-    sp.print(neighborsArr[f][3]);
-    sp.print(neighborsArr[f][4]);
-    sp.println(neighborsArr[f][5]);
-  }
-  sp.println();
-  //print color array
-  FOREACH_FACE(f) {
-    sp.print("Piece ");
-    sp.print(f + 1);
-    sp.print(" ");
-    sp.print(colorsArr[f][0]);
-    sp.print(colorsArr[f][1]);
-    sp.print(colorsArr[f][2]);
-    sp.print(colorsArr[f][3]);
-    sp.print(colorsArr[f][4]);
-    sp.println(colorsArr[f][5]);
-  }
-  sp.println();
-}
+//void printAll() {
+//  //print the connection array
+//  sp.println();
+//  FOREACH_FACE(f) {
+//    sp.print("Piece ");
+//    sp.print(f + 1);
+//    sp.print(" ");
+//    sp.print(neighborsArr[f][0]);
+//    sp.print(neighborsArr[f][1]);
+//    sp.print(neighborsArr[f][2]);
+//    sp.print(neighborsArr[f][3]);
+//    sp.print(neighborsArr[f][4]);
+//    sp.println(neighborsArr[f][5]);
+//  }
+//  sp.println();
+//  //print color array
+//  FOREACH_FACE(f) {
+//    sp.print("Piece ");
+//    sp.print(f + 1);
+//    sp.print(" ");
+//    sp.print(colorsArr[f][0]);
+//    sp.print(colorsArr[f][1]);
+//    sp.print(colorsArr[f][2]);
+//    sp.print(colorsArr[f][3]);
+//    sp.print(colorsArr[f][4]);
+//    sp.println(colorsArr[f][5]);
+//  }
+//  sp.println();
+//}
 
