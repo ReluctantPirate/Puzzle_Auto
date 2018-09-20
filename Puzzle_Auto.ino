@@ -311,6 +311,7 @@ void makePuzzle() {
   }
   colorConnections();
   //that does it!
+  printAll();
 }
 
 void resetAll() {
@@ -369,22 +370,26 @@ void addBlink(byte minSearchIndex, byte maxSearchIndex) {
 
   //first, the counterclockwise face of the blinked we attached to
   byte counterclockwiseNeighborInfo = neighborsArr[blinkIndex][nextCounterclockwise(faceIndex)];
-  if (counterclockwiseNeighborInfo != UNDECLARED && counterclockwiseNeighborInfo != NONEIGHBOR) { //there is a neighbor on the next counterclockwise face of the blink we placed onto
-    //we tell the new blink it has a neighbor clockwise from our connection
+  if (counterclockwiseNeighborInfo != UNDECLARED) { //there is a neighbor or NONEIGHBOR on the next counterclockwise face of the blink we placed onto
+    //we tell the new blink it has a neighbor or NONEIGHBOR clockwise from our connection
     byte newNeighborConnectionFace = nextClockwise(getNeighborFace(faceIndex));
     neighborsArr[piecesPlaced - 1][newNeighborConnectionFace] = counterclockwiseNeighborInfo;
-    //we also tell the counterclockwise neighbor that it has this new neighbor clockwise
-    neighborsArr[counterclockwiseNeighborInfo - 1][getNeighborFace(newNeighborConnectionFace)] = piecesPlaced;
+
+    if (counterclockwiseNeighborInfo != NONEIGHBOR) { //if it's an actual blink, it needs to know about the new connection
+      neighborsArr[counterclockwiseNeighborInfo - 1][getNeighborFace(newNeighborConnectionFace)] = piecesPlaced;
+    }
   }
 
   //now, the clockwise face (everything reversed, but identical)
   byte clockwiseNeighborInfo = neighborsArr[blinkIndex][nextClockwise(faceIndex)];
-  if (clockwiseNeighborInfo != UNDECLARED && clockwiseNeighborInfo != NONEIGHBOR) { //there is a neighbor on the next clockwise face of the blink we placed onto
-    //we tell the new blink it has a neighbor counterclockwise from our connection
+  if (clockwiseNeighborInfo != UNDECLARED) { //there is a neighbor or NONEIGHBOR on the next clockwise face of the blink we placed onto
+    //we tell the new blink it has a neighbor or NONEIGHBOR counterclockwise from our connection
     byte newNeighborConnectionFace = nextCounterclockwise(getNeighborFace(faceIndex));
     neighborsArr[piecesPlaced - 1][newNeighborConnectionFace] = clockwiseNeighborInfo;
-    //we also tell the clockwise neighbor that it has this new neighbor clockwise
-    neighborsArr[clockwiseNeighborInfo - 1][getNeighborFace(newNeighborConnectionFace)] = piecesPlaced;
+
+    if (clockwiseNeighborInfo != NONEIGHBOR) { //if it's an actual blink, it needs to know about the new connection
+      neighborsArr[clockwiseNeighborInfo - 1][getNeighborFace(newNeighborConnectionFace)] = piecesPlaced;
+    }
   }
 }
 
@@ -453,33 +458,33 @@ byte getCurrentPiece () {
   }
 }
 
-//void printAll() {
-//  //print the connection array
-//  sp.println();
-//  FOREACH_FACE(f) {
-//    sp.print("Piece ");
-//    sp.print(f + 1);
-//    sp.print(" ");
-//    sp.print(neighborsArr[f][0]);
-//    sp.print(neighborsArr[f][1]);
-//    sp.print(neighborsArr[f][2]);
-//    sp.print(neighborsArr[f][3]);
-//    sp.print(neighborsArr[f][4]);
-//    sp.println(neighborsArr[f][5]);
-//  }
-//  sp.println();
-//  //print color array
-//  FOREACH_FACE(f) {
-//    sp.print("Piece ");
-//    sp.print(f + 1);
-//    sp.print(" ");
-//    sp.print(colorsArr[f][0]);
-//    sp.print(colorsArr[f][1]);
-//    sp.print(colorsArr[f][2]);
-//    sp.print(colorsArr[f][3]);
-//    sp.print(colorsArr[f][4]);
-//    sp.println(colorsArr[f][5]);
-//  }
-//  sp.println();
-//}
+void printAll() {
+  //print the connection array
+  sp.println();
+  FOREACH_FACE(f) {
+    sp.print("Piece ");
+    sp.print(f + 1);
+    sp.print(" ");
+    sp.print(neighborsArr[f][0]);
+    sp.print(neighborsArr[f][1]);
+    sp.print(neighborsArr[f][2]);
+    sp.print(neighborsArr[f][3]);
+    sp.print(neighborsArr[f][4]);
+    sp.println(neighborsArr[f][5]);
+  }
+  sp.println();
+  //print color array
+  FOREACH_FACE(f) {
+    sp.print("Piece ");
+    sp.print(f + 1);
+    sp.print(" ");
+    sp.print(colorsArr[f][0]);
+    sp.print(colorsArr[f][1]);
+    sp.print(colorsArr[f][2]);
+    sp.print(colorsArr[f][3]);
+    sp.print(colorsArr[f][4]);
+    sp.println(colorsArr[f][5]);
+  }
+  sp.println();
+}
 
