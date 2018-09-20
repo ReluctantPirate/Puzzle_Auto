@@ -21,6 +21,9 @@ bool isMaster = false;
 byte masterFace = 0;//for receivers, this is the face where the master was found
 Timer sparkleTimer;
 
+Timer messageTimer;
+#define MESSAGE_DURATION 500
+
 ////GAME VARIABLES////
 Color displayColors[5] = {OFF, RED, YELLOW, BLUE, WHITE};
 byte faceColors[6] = {0, 0, 0, 0, 0, 0};
@@ -85,6 +88,7 @@ void assembleLoop() {
       byte neighborData = getLastValueReceivedOnFace(f);
       if (getCommMode(neighborData) == 1) { //this neighbor is in comm mode (is master)
         isCommunicating = 1;//we are now communicating
+        messageTimer.set(MESSAGE_DURATION);
         gameMode = GAME;//not immediately important, but will come into play later
         masterFace = f;//will only listen to communication on this face
         requestFace = 0;
@@ -215,8 +219,9 @@ void communicationMasterLoop() {
 
 void communicationReceiverLoop() {
   // if button pressed, advance the face we are asking for
-  if ( buttonPressed() ) {
+  if ( messageTimer.isExpired( ) ) {
     requestFace ++;
+    messageTimer.set(MESSAGE_DURATION);
   }
 
   //so the trick here is to only listen to the master face
