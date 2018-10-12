@@ -24,11 +24,16 @@ Timer sparkleTimer;
 Timer messageTimer;
 #define MESSAGE_DURATION 500
 
+enum switchStates {AUTO, TOMANUAL, MANUAL, TOAUTO};
+byte switchState = AUTO;
+
 ////GAME VARIABLES////
 Color displayColors[5] = {OFF, RED, YELLOW, BLUE, WHITE};
 byte faceColors[6] = {0, 0, 0, 0, 0, 0};
 byte faceBrightness[6] = {0, 0, 0, 0, 0, 0};
 byte dimVal = 25;
+
+Color manualColors[5] = {OFF, ORANGE, GREEN, MAGENTA, WHITE};
 
 
 void setup() {
@@ -40,18 +45,32 @@ void loop() {
     communicationLoop();
     communicationDisplay();
   } else {
-    if (gameMode == ASSEMBLE) {
-      assembleLoop();
-      assembleDisplay();
-    } else if (gameMode == GAME) {
-      gameLoop();
-      gameDisplay();
+    if (switchState == AUTO || switchState == TOAUTO) {//the two auto loops
+      if (gameMode == ASSEMBLE) {
+        assembleLoop();
+        assembleDisplay();
+      } else if (gameMode == GAME) {
+        gameLoop();
+        gameDisplay();
+      }
+    } else if (switchState == MANUAL) {//the two manual loops
+      if (gameMode == ASSEMBLE) {
+        manualCreateLoop();
+        manualCreateDisplay();
+      } else if (gameMode == GAME) {
+        gameLoop();
+        gameDisplay();
+      }
+    } else if (switchState == TOMANUAL) {
+      toManualLoop();
+      manualCreateDisplay();
     }
-  }
+  }//this doesn't run loops when
 
   // clean button presses
   buttonPressed();
   buttonDoubleClicked();
+  buttonLongPressed();
 }
 
 void assembleLoop() {
@@ -96,8 +115,27 @@ void assembleLoop() {
     }
   }
 
+  //here we check to see if we should change switchState
+  if (switchState == TOAUTO) {
+    if (autoCheck() == true) {
+      switchState = AUTO;
+    }
+  } else if (switchState == AUTO) {
+    if (toManualCheck() == true) {
+      switchState = TOMANUAL;
+      gameMode = ASSEMBLE;
+      canBeginAlgorithm = false;
+      isCommunicating = 0;
+    }
+  }
+
+  //we also watch here for long presses to turn us from auto to manual
+  if (buttonLongPressed()) {
+    switchState = TOMANUAL;
+  }
+
   //the last thing we do is communicate our state. All 0s for now, changes later
-  byte sendData = (isCommunicating << 5) + (gameMode << 4);
+  byte sendData = (isCommunicating << 5) + (gameMode << 4) + (switchState << 2);
   setValueSentOnAllFaces(sendData);
 }
 
@@ -128,11 +166,6 @@ void gameLoop() {
         faceBrightness[f] = dimVal;
       }
 
-      //look for neighbors in assemble
-      if (getCommMode(neighborData) == 0 && getGameMode(getLastValueReceivedOnFace(f)) == ASSEMBLE) {
-        gameMode = ASSEMBLE;
-      }
-
     } else {//no neighbor
       faceBrightness[f] = dimVal;
     }
@@ -140,22 +173,184 @@ void gameLoop() {
 
   //if we are double clicked, we go to assemble mode
   if (buttonDoubleClicked()) {
-    gameMode = ASSEMBLE;
+    if (switchState == AUTO) {
+      gameMode = ASSEMBLE;
+    } else if (switchState == MANUAL) {
+      switchState = TOMANUAL;//interestingly, we don't move immediately
+      gameMode = ASSEMBLE;
+    }
+  }
+
+  //now we look for neighbors who are going to assemble mode.
+  //this differs in auto and manual
+  switch (switchState) {
+    case AUTO://we are in auto mode. just check for neighbors in assemble mode
+      FOREACH_FACE(f) {
+        if (!isValueReceivedOnFaceExpired(f)) {
+          byte neighborData = getLastValueReceivedOnFace(f);
+          if (getCommMode(neighborData) == 0 && getGameMode(neighborData) == ASSEMBLE) {
+            gameMode = ASSEMBLE;
+          }
+        }
+      }
+      break;
+    case MANUAL://so here we actually check if we have neighbors in TOMANUAL
+      if (toManualCheck() == true) {
+        switchState = TOMANUAL;
+      }
+      break;
   }
 
   //set communications
-  FOREACH_FACE(f) {//[COMM][MODE][----][----][COLR][COLR]
-    byte sendData = (isCommunicating << 5) + (gameMode << 4) + (faceColors[f]);
+  FOREACH_FACE(f) {//[COMM][MODE][SWITCH|STATE][COLR][COLR]
+    byte sendData = (isCommunicating << 5) + (gameMode << 4) + (switchState << 2) + (faceColors[f]);
     setValueSentOnFace(sendData, f);
   }
 }
 
 void gameDisplay() {
   FOREACH_FACE(f) {
-    Color displayColor = displayColors[faceColors[f]];
+    Color displayColor = WHITE;
+    if (switchState == MANUAL) {
+      displayColor = manualColors[faceColors[f]];
+    } else if (switchState == AUTO) {
+      displayColor = displayColors[faceColors[f]];
+    }
     byte displayBrightness = faceBrightness[f];
     setColorOnFace(dim(displayColor, displayBrightness), f);
   }
+}
+
+byte colorResolver[4][4] = {{0, 1, 2, 3}, {1, 1, 2, 1}, {2, 2, 2, 3}, {3, 1, 3, 3}};//this is a magic faster way to do this
+
+void manualCreateLoop() {
+  //detect connections
+  FOREACH_FACE(f) {
+    if (!isValueReceivedOnFaceExpired(f)) {//hey, a neighbor
+      byte neighborData = getLastValueReceivedOnFace(f);
+      if (faceColors[f] == 0) { //this is a new neighbor
+        faceColors[f] = rand(2) + 1;
+        faceBrightness[f] = 255;
+      } else {//so we had a neighbor here before. Let's make sure the colors match
+        byte resolvedColor = colorResolver[faceColors[f]][getColorInfo(neighborData)];
+        faceColors[f] = resolvedColor;
+      }
+    } else {//no neighbor
+      faceColors[f] = 0;
+    }
+  }
+
+  //wait for doubleclick to move into game mode
+  if (buttonDoubleClicked() && !isAlone()) {
+    gameMode = GAME;
+  }
+
+  //wait for neighbors to send you into game mode
+  FOREACH_FACE(f) {
+    if (!isValueReceivedOnFaceExpired(f)) {
+      byte neighborData = getLastValueReceivedOnFace(f);
+      if (getGameMode(neighborData) == GAME) {
+        gameMode = GAME;
+      }
+    }
+  }
+
+  //do switchState calculations
+  if (toAutoCheck() == true) {
+    switchState = TOAUTO;
+  }
+
+  if (buttonLongPressed()) {
+    switchState = TOAUTO;
+  }
+
+  //COMMUNICATION
+  FOREACH_FACE(f) {
+    byte sendData = (gameMode << 4) + (switchState << 2) + (faceColors[f]);
+    setValueSentOnFace(sendData, f);
+  }
+}
+
+void toManualLoop() {
+  if (manualCheck() == true) {
+    switchState = MANUAL;
+    gameMode = ASSEMBLE;
+  }
+
+  //TOAUTO is being given priority over TOMANUAL
+  if (toAutoCheck() == true) {
+    switchState = TOAUTO;
+    gameMode = ASSEMBLE;
+  }
+}
+
+void manualCreateDisplay() {
+  if (isAlone()) {
+    setColorOnFace(dim(ORANGE,  dimVal), 0);
+    setColorOnFace(dim(GREEN,   dimVal), 1);
+    setColorOnFace(dim(MAGENTA, dimVal), 2);
+    setColorOnFace(dim(ORANGE,  dimVal), 3);
+    setColorOnFace(dim(GREEN,   dimVal), 4);
+    setColorOnFace(dim(MAGENTA, dimVal), 5);
+  } else {
+    FOREACH_FACE(f) {
+      Color displayColor = manualColors[faceColors[f]];;
+      setColorOnFace(displayColor, f);
+    }
+  }
+}
+
+////DO THE CHECKS TO SEE IF I CAN OR SHOULD CHANGE STATE
+bool toManualCheck() {//if I have a neighbor in TOMANUAL, change to that
+  bool canMoveOn = false;
+  FOREACH_FACE(f) {
+    if (!isValueReceivedOnFaceExpired(f)) {
+      byte neighborData = getLastValueReceivedOnFace(f);
+      if (getSwitchState(neighborData) == TOMANUAL) {
+        canMoveOn = true;
+      }
+    }
+  }
+  return canMoveOn;
+}
+
+bool manualCheck() {//if all neighbors are in TOMANUAL or MANUAL, we can move on
+  bool canMoveOn = true;
+  FOREACH_FACE(f) {
+    if (!isValueReceivedOnFaceExpired(f)) {
+      byte neighborData = getLastValueReceivedOnFace(f);
+      if (getSwitchState(neighborData) == AUTO || getSwitchState(neighborData) == TOAUTO) {//the states we don't want
+        canMoveOn = false;
+      }
+    }
+  }
+  return canMoveOn;
+}
+
+bool toAutoCheck() {
+  bool canMoveOn = false;
+  FOREACH_FACE(f) {
+    if (!isValueReceivedOnFaceExpired(f)) {
+      byte neighborData = getLastValueReceivedOnFace(f);
+      if (getSwitchState(neighborData) == TOAUTO) {
+        canMoveOn = true;
+      }
+    }
+  }
+  return canMoveOn;
+}
+
+bool autoCheck() {
+  bool canMoveOn = true;
+  FOREACH_FACE(f) {
+    if (!isValueReceivedOnFaceExpired(f)) {
+      byte neighborData = getLastValueReceivedOnFace(f);
+      if (getSwitchState(neighborData) == MANUAL || getSwitchState(neighborData) == TOMANUAL) {//the states we don't want
+        canMoveOn = false;
+      }
+    }
+  }
+  return canMoveOn;
 }
 
 /////////////////////////////////
@@ -246,16 +441,20 @@ byte getCommMode(byte data) {
   return (data >> 5);//returns just the first bit
 }
 
+byte getGameMode(byte data) {
+  return ((data >> 4) & 1);//returns just the 2nd bit
+}
+
+byte getSwitchState(byte data) {
+  return ((data >> 2) & 3);//returns the 3rd and 4th bits
+}
+
 byte getFaceNum(byte data) {
   return ((data >> 2) & 7);//returns the 2nd, 3rd, and 4th bit
 }
 
 byte getColorInfo(byte data) {
   return (data & 3);//returns the 5th and 6th bits
-}
-
-byte getGameMode(byte data) {
-  return ((data >> 4) & 1);
 }
 
 void communicationDisplay() {
