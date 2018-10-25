@@ -22,13 +22,13 @@ byte masterFace = 0;//for receivers, this is the face where the master was found
 Timer sparkleTimer;
 
 Timer messageTimer;
-#define MESSAGE_DURATION 500
+#define MESSAGE_DURATION 750
 
 ////GAME VARIABLES////
 Color displayColors[5] = {OFF, RED, YELLOW, BLUE, WHITE};
 byte faceColors[6] = {0, 0, 0, 0, 0, 0};
 byte faceBrightness[6] = {0, 0, 0, 0, 0, 0};
-byte dimVal = 25;
+byte dimVal = 64;
 
 
 void setup() {
