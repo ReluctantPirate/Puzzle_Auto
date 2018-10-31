@@ -247,11 +247,6 @@ void communicationMasterLoop() {
       packetTimer.set(TIMEOUT_DURATION);
       sendFailures ++;
     }
-
-    if (sendFailures > 3) {
-      gameMode = SETUPAUTO;
-    }
-
   }
 
   byte sendData = (gameMode << 2);
