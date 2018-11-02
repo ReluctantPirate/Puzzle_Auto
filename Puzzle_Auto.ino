@@ -272,7 +272,7 @@ void toAutoLoop() {
   }
 
   if (stillWaiting == false) {
-    gameMode = SETUPMANUAL;
+    gameMode = SETUPAUTO;
   }
 }
 
