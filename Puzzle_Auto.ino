@@ -26,7 +26,8 @@ Color autoColors[5] = {OFF, RED, YELLOW, BLUE, WHITE};
 Color manualColors[5] = {OFF, ORANGE, GREEN, MAGENTA, WHITE};
 byte faceColors[6] = {0, 0, 0, 0, 0, 0};
 byte faceBrightness[6] = {0, 0, 0, 0, 0, 0};
-byte dimVal = 64;
+byte colorDim = 160;
+byte whiteDim = 64;
 
 void setup() {
   sp.begin();
@@ -104,10 +105,10 @@ void setupAutoLoop() {
         numNeighbors++;
         faceBrightness[f] = 255;
       } else {
-        faceBrightness[f] = dimVal;
+        faceBrightness[f] = whiteDim;
       }
     } else {
-      faceBrightness[f] = dimVal;
+      faceBrightness[f] = whiteDim;
     }
   }
 
@@ -288,7 +289,7 @@ void gameLoop() {
       if (neighborColor == faceColors[f]) { //hey, a match!
         faceBrightness[f] = 255;
       } else {//no match :(
-        faceBrightness[f] = dimVal;
+        faceBrightness[f] = colorDim;
       }
 
       //look for neighbors turning us back to setup
@@ -299,14 +300,11 @@ void gameLoop() {
       } else if (gameMode == GAMEMANUAL) {
         if (getGameMode(neighborData) == SETUPMANUAL) {
           gameMode = SETUPMANUAL;
-          FOREACH_FACE(ff) {//quick, set all your colors to 0
-            faceColors[ff] = 0;
-          }
         }
       }
 
     } else {//no neighbor
-      faceBrightness[f] = dimVal;
+      faceBrightness[f] = colorDim;
     }
   }
 
@@ -345,14 +343,14 @@ void assembleDisplay() {
     FOREACH_FACE(f) {
       Color displayColor = manualColors[faceColors[f]];
       if (faceColors[f] == 0) {
-        displayColor = dim(WHITE, dimVal);
+        displayColor = dim(WHITE, whiteDim);
       }
       setColorOnFace(displayColor, f);
     }
   } else if (gameMode == TOAUTO) {//dim white flash
-    setColor(dim(WHITE, dimVal));
+    setColor(dim(WHITE, whiteDim));
   } else if (gameMode == TOMANUAL) {//dim white flash
-    setColor(dim(WHITE, dimVal));
+    setColor(dim(WHITE, whiteDim));
   }
 }
 
