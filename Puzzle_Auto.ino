@@ -68,7 +68,6 @@ void loop() {
       break;
     case LOCKING:
       lockingLoop();
-      assembleDisplay();
       break;
     case GAMEMANUAL:
       gameLoop();
@@ -300,6 +299,9 @@ void gameLoop() {
       } else if (gameMode == GAMEMANUAL) {
         if (getGameMode(neighborData) == SETUPMANUAL) {
           gameMode = SETUPMANUAL;
+          FOREACH_FACE(ff) {//quick, set all your colors to 0
+            faceColors[ff] = 0;
+          }
         }
       }
 
@@ -339,29 +341,18 @@ void assembleDisplay() {
       }
     }
   } else if (gameMode == SETUPMANUAL) {
-    if (isAlone()) {//display a dim field
-      setColorOnFace(dim(ORANGE, dimVal), 0);
-      setColorOnFace(dim(GREEN, dimVal), 1);
-      setColorOnFace(dim(MAGENTA, dimVal), 2);
-      setColorOnFace(dim(ORANGE, dimVal), 3);
-      setColorOnFace(dim(GREEN, dimVal), 4);
-      setColorOnFace(dim(MAGENTA, dimVal), 5);
-    } else {//display the connection color
-      FOREACH_FACE(f) {
-        setColorOnFace(manualColors[faceColors[f]], f);
+    //display the connection color
+    FOREACH_FACE(f) {
+      Color displayColor = manualColors[faceColors[f]];
+      if (faceColors[f] == 0) {
+        displayColor = dim(WHITE, dimVal);
       }
+      setColorOnFace(displayColor, f);
     }
-  } else if (gameMode == LOCKING) {//white flash
-    setColor(WHITE);
   } else if (gameMode == TOAUTO) {//dim white flash
     setColor(dim(WHITE, dimVal));
-  } else if (gameMode == TOMANUAL) {//dim field flash
-    setColorOnFace(dim(ORANGE, dimVal), 0);
-    setColorOnFace(dim(GREEN, dimVal), 1);
-    setColorOnFace(dim(MAGENTA, dimVal), 2);
-    setColorOnFace(dim(ORANGE, dimVal), 3);
-    setColorOnFace(dim(GREEN, dimVal), 4);
-    setColorOnFace(dim(MAGENTA, dimVal), 5);
+  } else if (gameMode == TOMANUAL) {//dim white flash
+    setColor(dim(WHITE, dimVal));
   }
 }
 
@@ -431,8 +422,9 @@ void communicationMasterLoop() {
     }
   }
 
-  byte sendData = (gameMode << 2);
-  setValueSentOnAllFaces(sendData);
+  if (buttonDoubleClicked()) {
+    gameMode = SETUPAUTO;
+  }
 }
 
 void sendPuzzlePackets(byte blankFace) {
@@ -496,8 +488,9 @@ void communicationReceiverLoop() {
     }
   }
 
-  byte sendData = (gameMode << 2);
-  setValueSentOnAllFaces(sendData);
+  if (buttonDoubleClicked()) {
+    gameMode = SETUPAUTO;
+  }
 }
 
 byte getGameMode(byte data) {
@@ -509,19 +502,11 @@ byte getColorInfo(byte data) {
 }
 
 void communicationDisplay() {
-  switch (gameMode) {
-    case PACKETREADY:
-      setColor(ORANGE);
-      break;
-    case PACKETSENDING:
-      setColor(YELLOW);
-      break;
-    case PACKETLISTENING:
-      setColor(BLUE);
-      break;
-    case PACKETRECEIVED:
-      setColor(GREEN);
-      break;
+  if (sparkleTimer.isExpired()) {
+    FOREACH_FACE(f) {
+      setColorOnFace(autoColors[rand(3) + 1], f);
+      sparkleTimer.set(50);
+    }
   }
 }
 
