@@ -2,12 +2,9 @@
 ServicePortSerial sp;
 
 ////COMMUNICATION VARIABLES////
-byte isCommunicating = 0;//this is the first digit of the communication. MOST IMPORTANT ONE
-enum gameModes {ASSEMBLE, GAME};//so these only occur when isCommunicating is false
-byte gameMode = ASSEMBLE;
-byte faceComm[6] = {0, 0, 0, 0, 0, 0}; //used to transmit face data during communication mode
-byte colorComm[6] = {0, 0, 0, 0, 0, 0}; //used to transmit color data during communication and game mode
-byte requestFace = 0;
+enum gameModes {SETUPAUTO, PACKETREADY, PACKETSENDING, PACKETLISTENING, PACKETRECEIVED, GAMEAUTO, TOMANUAL, SETUPMANUAL, LOCKING, GAMEMANUAL, TOAUTO};
+byte gameMode = SETUPAUTO;
+byte packetStates[6] = {PACKETREADY, PACKETREADY, PACKETREADY, PACKETREADY, PACKETREADY, PACKETREADY};
 
 ///ALGORITHM VARIABLES////
 byte piecesPlaced = 0;
@@ -21,48 +18,97 @@ bool isMaster = false;
 byte masterFace = 0;//for receivers, this is the face where the master was found
 Timer sparkleTimer;
 
-Timer messageTimer;
-#define MESSAGE_DURATION 750
+Timer packetTimer;
+#define TIMEOUT_DURATION 700
 
 ////GAME VARIABLES////
-Color displayColors[5] = {OFF, RED, YELLOW, BLUE, WHITE};
+Color autoColors[5] = {OFF, RED, YELLOW, BLUE, WHITE};
+Color manualColors[5] = {OFF, ORANGE, GREEN, MAGENTA, WHITE};
 byte faceColors[6] = {0, 0, 0, 0, 0, 0};
 byte faceBrightness[6] = {0, 0, 0, 0, 0, 0};
-byte dimVal = 64;
-
+byte colorDim = 160;
+byte whiteDim = 64;
 
 void setup() {
   sp.begin();
 }
 
 void loop() {
-  if (isCommunicating == 1) {
-    communicationLoop();
-    communicationDisplay();
-  } else {
-    if (gameMode == ASSEMBLE) {
-      assembleLoop();
+  switch (gameMode) {
+    case SETUPAUTO:
+      setupAutoLoop();
       assembleDisplay();
-    } else if (gameMode == GAME) {
+      break;
+    case PACKETREADY:
+      communicationMasterLoop();
+      communicationDisplay();
+      break;
+    case PACKETSENDING:
+      communicationMasterLoop();
+      communicationDisplay();
+      break;
+    case PACKETLISTENING:
+      communicationReceiverLoop();
+      communicationDisplay();
+      break;
+    case PACKETRECEIVED:
+      communicationReceiverLoop();
+      communicationDisplay();
+      break;
+    case GAMEAUTO:
       gameLoop();
       gameDisplay();
-    }
+      break;
+    case TOMANUAL:
+      toManualLoop();
+      assembleDisplay();
+      break;
+    case SETUPMANUAL:
+      setupManualLoop();
+      assembleDisplay();
+      break;
+    case LOCKING:
+      lockingLoop();
+      break;
+    case GAMEMANUAL:
+      gameLoop();
+      gameDisplay();
+      break;
+    case TOAUTO:
+      toAutoLoop();
+      assembleDisplay();
+      break;
   }
 
-  // clean button presses
-  buttonPressed();
+  //clear button presses
   buttonDoubleClicked();
+  buttonLongPressed();
+
+  //set communications
+  FOREACH_FACE(f) {//[COMM][MODE][----][----][COLR][COLR]
+    byte sendData = (gameMode << 2) + (faceColors[f]);
+    setValueSentOnFace(sendData, f);
+  }
 }
 
-void assembleLoop() {
+///////////////
+//SETUP LOOPS//
+///////////////
+
+void setupAutoLoop() {
   //all we do here is wait until we have 5 neighbors
   byte numNeighbors = 0;
   FOREACH_FACE(f) {
     if (!isValueReceivedOnFaceExpired(f)) { //neighbor!
-      numNeighbors++;
-      faceBrightness[f] = 255;
+      byte neighborData = getLastValueReceivedOnFace(f);
+      if (getGameMode(neighborData) == SETUPAUTO) { //this neighbor is ready for puzzling
+        numNeighbors++;
+        faceBrightness[f] = 255;
+      } else {
+        faceBrightness[f] = whiteDim;
+      }
     } else {
-      faceBrightness[f] = dimVal;
+      faceBrightness[f] = whiteDim;
     }
   }
 
@@ -74,11 +120,7 @@ void assembleLoop() {
 
   if (buttonDoubleClicked() && canBeginAlgorithm == true) {//this lets us become the master blink
     makePuzzle();//RUN THE ALGORITHM
-    FOREACH_FACE(f) {
-      faceComm[f] = 0;//setting all to communicate face 0
-      colorComm[f] = colorsArr[f][0];//setting whatever the face 0 color for each face is
-    }
-    isCommunicating = 1;
+    gameMode = PACKETREADY;
     canBeginAlgorithm = false;
     isMaster = true;
   }
@@ -86,35 +128,157 @@ void assembleLoop() {
   FOREACH_FACE(f) {//here we listen for other blinks to turn us into receiver blinks
     if (!isValueReceivedOnFaceExpired(f)) {//neighbor here
       byte neighborData = getLastValueReceivedOnFace(f);
-      if (getCommMode(neighborData) == 1) { //this neighbor is in comm mode (is master)
-        isCommunicating = 1;//we are now communicating
-        messageTimer.set(MESSAGE_DURATION);
-        gameMode = GAME;//not immediately important, but will come into play later
-        masterFace = f;//will only listen to communication on this face
-        requestFace = 0;
+      if (getGameMode(neighborData) == PACKETREADY) { //this neighbor will send a puzzle soon
+        gameMode = PACKETLISTENING;
+        masterFace = f;//will only listen for packets on this face
       }
     }
   }
 
-  //the last thing we do is communicate our state. All 0s for now, changes later
-  byte sendData = (isCommunicating << 5) + (gameMode << 4);
-  setValueSentOnAllFaces(sendData);
-}
-
-void assembleDisplay() {
-  if (sparkleTimer.isExpired() && canBeginAlgorithm) {
-    FOREACH_FACE(f) {
-      setColorOnFace(displayColors[rand(3) + 1], f);
-      sparkleTimer.set(50);
+  //look for blinks telling us to turn manual
+  FOREACH_FACE(f) {
+    if (!isValueReceivedOnFaceExpired(f)) {
+      byte neighborData = getLastValueReceivedOnFace(f);
+      if (getGameMode(neighborData) == TOMANUAL) {
+        gameMode = TOMANUAL;
+      }
     }
   }
 
-  if (!canBeginAlgorithm) {
-    FOREACH_FACE(f) {
-      setColorOnFace(dim(WHITE, faceBrightness[f]), f);
+  //look for presses that change us to manual
+  if (buttonLongPressed()) {
+    gameMode = TOMANUAL;
+  }
+}
+
+void setupManualLoop() {
+  //look for neighbors and make some connections!
+  FOREACH_FACE(f) {
+    if (!isValueReceivedOnFaceExpired(f)) {//there is someone here
+      byte neighborData = getLastValueReceivedOnFace(f);
+      if (getGameMode(neighborData) == SETUPMANUAL || getGameMode(neighborData) == LOCKING) { //this is a compatible neighbor
+        if (faceColors[f] == 0) {//oh, this is a new neighbor!
+          faceColors[f] = rand(2) + 1;
+        }
+      }
+    } else {//no one here
+      faceColors[f] = 0;
+    }
+  }
+
+  //now we resolve color conflicts with our neighbors
+  FOREACH_FACE(f) {
+    byte neighborColor = getColorInfo(getLastValueReceivedOnFace(f));
+    if (neighborColor != faceColors[f]) {
+      switch (faceColors[f]) {
+        case 1:
+          if (neighborColor == 2) {
+            faceColors[f] = 2;
+          }
+          break;
+        case 2:
+          if (neighborColor == 3) {
+            faceColors[f] = 3;
+          }
+          break;
+        case 3:
+          if (neighborColor == 1) {
+            faceColors[f] = 1;
+          }
+          break;
+      }
+    }
+  }
+
+  //look for neighbors telling us to transition to game or auto
+  FOREACH_FACE(f) {
+    if (!isValueReceivedOnFaceExpired(f)) {
+      byte neighborData = getLastValueReceivedOnFace(f);
+      if (getGameMode(neighborData) == LOCKING) {
+        gameMode = LOCKING;
+      } else if (getGameMode(neighborData) == TOAUTO) {
+        gameMode = TOAUTO;
+      }
+    }
+  }
+
+  //look out for double clicks to start the game
+  if (buttonDoubleClicked() && !isAlone()) {//only works when connected
+    gameMode = LOCKING;
+  }
+
+  //look for presses that change us to auto
+  if (buttonLongPressed()) {
+    gameMode = TOAUTO;
+  }
+}
+
+void lockingLoop() {
+  //all we do here is make sure all of our neighbors are ready to move on to the game
+  bool stillWaiting = false;
+  FOREACH_FACE(f) {
+    if (!isValueReceivedOnFaceExpired(f)) {
+      byte neighborData = getLastValueReceivedOnFace(f);
+
+      //look for neighbors still in setup, then wait
+      if (getGameMode(neighborData) == SETUPMANUAL) {
+        stillWaiting = true;
+      }
+    }
+  }
+
+  if (stillWaiting == false) {//time to move on
+    gameMode = GAMEMANUAL;
+  }
+}
+
+void toManualLoop() {
+  //I can move to actual SETUPMANUAL if all neighbors know we're moving OR don't care (are in incompatible states)
+  bool stillWaiting = false;
+  FOREACH_FACE(f) {
+    if (!isValueReceivedOnFaceExpired(f)) {
+      byte neighborData = getLastValueReceivedOnFace(f);
+      if (getGameMode(neighborData) == SETUPAUTO) {//only stop if there are neighbors left to tell
+        stillWaiting = true;
+      }
+    }
+  }
+
+  if (stillWaiting == false) {
+    gameMode = SETUPMANUAL;
+  }
+
+  //also, if I come across a TOAUTO, I should change to that
+  FOREACH_FACE(f) {
+    if (!isValueReceivedOnFaceExpired(f)) {
+      byte neighborData = getLastValueReceivedOnFace(f);
+      if (getGameMode(neighborData) == TOAUTO) {
+        gameMode = TOAUTO;
+      }
     }
   }
 }
+
+void toAutoLoop() {
+  //I can move to actual SETUPAUTO if all neighbors are in SETUPAUTO or TOAUTO
+  bool stillWaiting = false;
+  FOREACH_FACE(f) {
+    if (!isValueReceivedOnFaceExpired(f)) {
+      byte neighborData = getLastValueReceivedOnFace(f);
+      if (getGameMode(neighborData) == SETUPMANUAL || getGameMode(neighborData) == TOMANUAL) {//these neighbors haven't gotten the message
+        stillWaiting = true;
+      }
+    }
+  }
+
+  if (stillWaiting == false) {
+    gameMode = SETUPAUTO;
+  }
+}
+
+/////////////
+//GAME LOOP//
+/////////////
 
 void gameLoop() {
   //all we do here is look at our faces and see if they are touching like colors
@@ -125,160 +289,228 @@ void gameLoop() {
       if (neighborColor == faceColors[f]) { //hey, a match!
         faceBrightness[f] = 255;
       } else {//no match :(
-        faceBrightness[f] = dimVal;
+        faceBrightness[f] = colorDim;
       }
 
-      //look for neighbors in assemble
-      if (getCommMode(neighborData) == 0 && getGameMode(getLastValueReceivedOnFace(f)) == ASSEMBLE) {
-        gameMode = ASSEMBLE;
+      //look for neighbors turning us back to setup
+      if (gameMode == GAMEAUTO) {
+        if (getGameMode(neighborData) == SETUPAUTO) {
+          gameMode = SETUPAUTO;
+        }
+      } else if (gameMode == GAMEMANUAL) {
+        if (getGameMode(neighborData) == SETUPMANUAL) {
+          gameMode = SETUPMANUAL;
+        }
       }
 
     } else {//no neighbor
-      faceBrightness[f] = dimVal;
+      faceBrightness[f] = colorDim;
     }
   }
 
   //if we are double clicked, we go to assemble mode
   if (buttonDoubleClicked()) {
-    gameMode = ASSEMBLE;
+    if (gameMode == GAMEAUTO) {
+      gameMode = SETUPAUTO;
+    } else if (gameMode == GAMEMANUAL) {
+      gameMode = SETUPMANUAL;
+    }
   }
 
-  //set communications
-  FOREACH_FACE(f) {//[COMM][MODE][----][----][COLR][COLR]
-    byte sendData = (isCommunicating << 5) + (gameMode << 4) + (faceColors[f]);
-    setValueSentOnFace(sendData, f);
+
+}
+
+/////////////////
+//DISPLAY LOOPS//
+/////////////////
+
+void assembleDisplay() {
+  if (gameMode == SETUPAUTO) {
+    if (sparkleTimer.isExpired() && canBeginAlgorithm) {
+      FOREACH_FACE(f) {
+        setColorOnFace(autoColors[rand(3) + 1], f);
+        sparkleTimer.set(50);
+      }
+    }
+
+    if (!canBeginAlgorithm) {
+      FOREACH_FACE(f) {
+        setColorOnFace(dim(WHITE, faceBrightness[f]), f);
+      }
+    }
+  } else if (gameMode == SETUPMANUAL) {
+    //display the connection color
+    FOREACH_FACE(f) {
+      Color displayColor = manualColors[faceColors[f]];
+      if (faceColors[f] == 0) {
+        displayColor = dim(WHITE, whiteDim);
+      }
+      setColorOnFace(displayColor, f);
+    }
+  } else if (gameMode == TOAUTO) {//dim white flash
+    setColor(dim(WHITE, whiteDim));
+  } else if (gameMode == TOMANUAL) {//dim white flash
+    setColor(dim(WHITE, whiteDim));
   }
 }
 
 void gameDisplay() {
+  Color displayColor;
   FOREACH_FACE(f) {
-    Color displayColor = displayColors[faceColors[f]];
+    if (gameMode == GAMEAUTO) {
+      displayColor = autoColors[faceColors[f]];
+    } else if (gameMode == GAMEMANUAL) {
+      displayColor = manualColors[faceColors[f]];
+    }
     byte displayBrightness = faceBrightness[f];
     setColorOnFace(dim(displayColor, displayBrightness), f);
   }
 }
 
-/////////////////////////////////
-//BEGIN COMMUNICATION PROCEDURE//
-/////////////////////////////////
+///////////////////////
+//COMMUNICATION LOOPS//
+///////////////////////
 
-void communicationLoop() {
-  if (isMaster) {
-    communicationMasterLoop();
-  } else {
-    communicationReceiverLoop();
+void communicationMasterLoop() {
+
+  if (gameMode == PACKETREADY) {//here we wait to send packets to listening neighbors
+
+    byte neighborsListening = 0;
+    byte emptyFace;
+    FOREACH_FACE(f) {
+      if (!isValueReceivedOnFaceExpired(f)) {
+        byte neighborData = getLastValueReceivedOnFace(f);
+        if (getGameMode(neighborData) == PACKETLISTENING) {//this neighbor is ready to get a packet.
+          neighborsListening++;
+        }
+      } else {
+        emptyFace = f;
+      }
+    }
+
+    if (neighborsListening == 5) {
+      gameMode = PACKETSENDING;
+      sendPuzzlePackets(emptyFace);
+      packetTimer.set(TIMEOUT_DURATION);
+    }
+
+  } else if (gameMode == PACKETSENDING) {//here we listen for neighbors who have received packets
+
+    byte neighborsReceived = 0;
+    byte emptyFace;
+    FOREACH_FACE(f) {
+      if (!isValueReceivedOnFaceExpired(f)) {
+        byte neighborData = getLastValueReceivedOnFace(f);
+        if (getGameMode(neighborData) == PACKETRECEIVED) {//this neighbor is ready to play
+          neighborsReceived++;
+        }
+      } else {
+        emptyFace = f;
+      }
+    }
+
+    if (neighborsReceived == 5) { //hooray, we did it!
+      gameMode = GAMEAUTO;
+      return;
+    }
+
+    if (gameMode != GAMEAUTO && packetTimer.isExpired()) { //so we've gone a long time without this working out
+      sendPuzzlePackets(emptyFace);
+      packetTimer.set(TIMEOUT_DURATION);
+    }
+  }
+
+  if (buttonDoubleClicked()) {
+    gameMode = SETUPAUTO;
   }
 }
 
-void communicationMasterLoop() {
-  byte completeNeighbors = 0;
+void sendPuzzlePackets(byte blankFace) {
+  //declare packets
+  byte packet0[6];
+  byte packet1[6];
+  byte packet2[6];
+  byte packet3[6];
+  byte packet4[6];
+  byte packet5[6];
+
+  //fill packets
   FOREACH_FACE(f) {
-    if (!isValueReceivedOnFaceExpired(f)) { //someone is here
-      byte requestData = getLastValueReceivedOnFace(f);
-
-      if (getCommMode(requestData) == 0 && getGameMode(requestData) == ASSEMBLE) {//this neighbor is still waiting. Show them face 0 until they catch on
-        faceComm[f] = neighborsArr[f][0];
-        colorComm[f] = colorsArr[f][0];
-      }
-
-      if (getCommMode(requestData) == 1) {//this neighbor is ready for communication
-        faceComm[f] = getFaceNum(requestData);//this is the face it wants info about
-        colorComm[f] = colorsArr[f][faceComm[f]];//the color for that face of that blink
-      }//end communication ready check
-    }//end neighbor talk
-
-    if (isValueReceivedOnFaceExpired(f)) { //this is the missing face. Use this info to fill our own face array
-      FOREACH_FACE(ff) {
-        //just filling our array with the contents of that level of the puzzle
-        faceColors[ff] = colorsArr[f][ff];
-      }
-    }//end missing face check
-  }//end request check loop
-
-  byte neighborsInGameMode = 0;
-  FOREACH_FACE(f) { //check for neighbors in game mode
-    if (!isValueReceivedOnFaceExpired(f)) {
-      byte neighborData = getLastValueReceivedOnFace(f);
-      if (getCommMode(neighborData) == 0 && getGameMode(neighborData) == GAME) {
-        neighborsInGameMode++;
-      }
-    }
-  }
-  if (neighborsInGameMode >= 5) { //it should never be >, but for safety...
-    isCommunicating = 0;
-    gameMode = GAME;//redundant technically, but leaving for now
-    isMaster = false;
+    packet0[f] = colorsArr[0][f];
+    packet1[f] = colorsArr[1][f];
+    packet2[f] = colorsArr[2][f];
+    packet3[f] = colorsArr[3][f];
+    packet4[f] = colorsArr[4][f];
+    packet5[f] = colorsArr[5][f];
   }
 
+  //SEND PACKETS
+  sendPacketOnFace(0, (byte *) packet0, 6);
+  sendPacketOnFace(1, (byte *) packet1, 6);
+  sendPacketOnFace(2, (byte *) packet2, 6);
+  sendPacketOnFace(3, (byte *) packet3, 6);
+  sendPacketOnFace(4, (byte *) packet4, 6);
+  sendPacketOnFace(5, (byte *) packet5, 6);
+
+  //assign self the correct info
   FOREACH_FACE(f) {
-    //set up all the communication
-    byte sendData = (isCommunicating << 5) + (faceComm[f] << 2) + (colorComm[f]);
-    setValueSentOnFace(sendData, f);
+    faceColors[f] = colorsArr[blankFace][f];
   }
 }
 
 void communicationReceiverLoop() {
-  // if button pressed, advance the face we are asking for
-  if ( messageTimer.isExpired( ) ) {
-    requestFace ++;
-    messageTimer.set(MESSAGE_DURATION);
-  }
+  if (gameMode == PACKETLISTENING) {
 
-  //so the trick here is to only listen to the master face
-  byte receivedData = getLastValueReceivedOnFace(masterFace);
-  if (getCommMode(receivedData) == 1) { //we are still in the communication phase of the game
-    if (getFaceNum(receivedData) == requestFace) { //we are being told info about our requested face
-      faceColors[requestFace] = getColorInfo(receivedData);//take the color info, put it in the correct face
+    //listen for a packet on master face
+    if (isPacketReadyOnFace(masterFace)) {//is there a packet?
+      if (getPacketLengthOnFace(masterFace) == 6) {//is it the right length?
+        byte *data = (byte *) getPacketDataOnFace(masterFace);//grab the data
+        //fill our array with this data
+        FOREACH_FACE(f) {
+          faceColors[f] = data[f];
+        }
+        //let them know we heard them
+        gameMode = PACKETRECEIVED;
+      }
+    }
+
+    //also listen for the master face to suddenly change back to setup, which is bad
+    if (getGameMode(getLastValueReceivedOnFace(masterFace)) == SETUPAUTO) { //looks like we are reverting
+      gameMode = SETUPAUTO;
+    }
+
+  } else if (gameMode == PACKETRECEIVED) {
+    //wait for the master blink to transition to game
+    if (getGameMode(getLastValueReceivedOnFace(masterFace)) == GAMEAUTO) { //time to play!
+      gameMode = GAMEAUTO;
     }
   }
 
-  if (requestFace == 6) { //we have everything!
-    isCommunicating = 0;
-    gameMode = GAME;
+  if (buttonDoubleClicked()) {
+    gameMode = SETUPAUTO;
   }
-
-  //now we update our communication
-  byte sendData = (isCommunicating << 5) + (requestFace << 2);//[COMM][FACE][FACE][FACE][----][----]
-  setValueSentOnFace(sendData, masterFace); //we only communicate on this face. All others are 0 still
 }
 
-byte getCommMode(byte data) {
-  return (data >> 5);//returns just the first bit
-}
-
-byte getFaceNum(byte data) {
-  return ((data >> 2) & 7);//returns the 2nd, 3rd, and 4th bit
+byte getGameMode(byte data) {
+  return (data >> 2);//1st, 2nd, 3rd, and 4th bits
 }
 
 byte getColorInfo(byte data) {
   return (data & 3);//returns the 5th and 6th bits
 }
 
-byte getGameMode(byte data) {
-  return ((data >> 4) & 1);
-}
-
 void communicationDisplay() {
-  if (isMaster) {
-    setColor(WHITE);
-  } else {
-    // display WHITE if waiting
-    // display color if received
+  if (sparkleTimer.isExpired()) {
     FOREACH_FACE(f) {
-      if (f < requestFace) {
-        Color displayColor = displayColors[faceColors[f]];
-        setColorOnFace(displayColor, f);
-      }
-      else {
-        setColorOnFace(WHITE, f);
-      }
+      setColorOnFace(autoColors[rand(3) + 1], f);
+      sparkleTimer.set(50);
     }
   }
 }
 
-/////////////////////////////////////
-//BEGIN PUZZLE GENERATION ALGORITHM//
-/////////////////////////////////////
+///////////////////////////////
+//PUZZLE GENERATION ALGORITHM//
+///////////////////////////////
 
 void makePuzzle() {
   resetAll();
@@ -310,8 +542,6 @@ void makePuzzle() {
     addBlink(1, lastRingBlinkIndex);
   }
   colorConnections();
-  //that does it!
-  printAll();
 }
 
 void resetAll() {
@@ -457,34 +687,3 @@ byte getCurrentPiece () {
 
   }
 }
-
-void printAll() {
-  //print the connection array
-  sp.println();
-  FOREACH_FACE(f) {
-    sp.print("Piece ");
-    sp.print(f + 1);
-    sp.print(" ");
-    sp.print(neighborsArr[f][0]);
-    sp.print(neighborsArr[f][1]);
-    sp.print(neighborsArr[f][2]);
-    sp.print(neighborsArr[f][3]);
-    sp.print(neighborsArr[f][4]);
-    sp.println(neighborsArr[f][5]);
-  }
-  sp.println();
-  //print color array
-  FOREACH_FACE(f) {
-    sp.print("Piece ");
-    sp.print(f + 1);
-    sp.print(" ");
-    sp.print(colorsArr[f][0]);
-    sp.print(colorsArr[f][1]);
-    sp.print(colorsArr[f][2]);
-    sp.print(colorsArr[f][3]);
-    sp.print(colorsArr[f][4]);
-    sp.println(colorsArr[f][5]);
-  }
-  sp.println();
-}
-
