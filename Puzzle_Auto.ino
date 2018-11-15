@@ -1,6 +1,3 @@
-#include "Serial.h"
-ServicePortSerial sp;
-
 ////COMMUNICATION VARIABLES////
 enum gameModes {SETUPAUTO, PACKETREADY, PACKETSENDING, PACKETLISTENING, PACKETRECEIVED, GAMEAUTO, TOMANUAL, SETUPMANUAL, LOCKING, GAMEMANUAL, TOAUTO};
 byte gameMode = SETUPAUTO;
@@ -30,7 +27,6 @@ byte colorDim = 160;
 byte whiteDim = 64;
 
 void setup() {
-  sp.begin();
 }
 
 void loop() {
@@ -158,7 +154,7 @@ void setupManualLoop() {
       byte neighborData = getLastValueReceivedOnFace(f);
       if (getGameMode(neighborData) == SETUPMANUAL || getGameMode(neighborData) == LOCKING) { //this is a compatible neighbor
         if (faceColors[f] == 0) {//oh, this is a new neighbor!
-          faceColors[f] = rand(2) + 1;
+          faceColors[f] = random(2) + 1;
         }
       }
     } else {//no one here
@@ -328,7 +324,7 @@ void assembleDisplay() {
   if (gameMode == SETUPAUTO) {
     if (sparkleTimer.isExpired() && canBeginAlgorithm) {
       FOREACH_FACE(f) {
-        setColorOnFace(autoColors[rand(3) + 1], f);
+        setColorOnFace(autoColors[random(3) + 1], f);
         sparkleTimer.set(50);
       }
     }
@@ -502,7 +498,7 @@ byte getColorInfo(byte data) {
 void communicationDisplay() {
   if (sparkleTimer.isExpired()) {
     FOREACH_FACE(f) {
-      setColorOnFace(autoColors[rand(3) + 1], f);
+      setColorOnFace(autoColors[random(3) + 1], f);
       sparkleTimer.set(50);
     }
   }
@@ -516,7 +512,7 @@ void makePuzzle() {
   resetAll();
   piecesPlaced++;//this symbolically places the first blink in the center
   //place 2-4 NONEIGHBORS in first ring
-  byte emptySpots = rand(2) + 2;//this is how many NONEIGHBORS we're putting in
+  byte emptySpots = random(2) + 2;//this is how many NONEIGHBORS we're putting in
   FOREACH_FACE(f) {
     if (f < emptySpots) {
       neighborsArr[0][f] = NONEIGHBOR;
@@ -524,8 +520,8 @@ void makePuzzle() {
   }
 
   for (int j = 0; j < 12; j++) {//quick shuffle method, random enough for our needs
-    byte swapA = rand(5);
-    byte swapB = rand(5);
+    byte swapA = random(5);
+    byte swapB = random(5);
     byte temp = neighborsArr[0][swapA];
     neighborsArr[0][swapA] = neighborsArr[0][swapB];
     neighborsArr[0][swapB] = temp;
@@ -575,7 +571,7 @@ void addBlink(byte minSearchIndex, byte maxSearchIndex) {
   }//end of eligible positions counter
 
   //now choose a random one of those eligible positions
-  byte chosenPosition = rand(eligiblePositions - 1) + 1;//necessary math to get 1-X values
+  byte chosenPosition = random(eligiblePositions - 1) + 1;//necessary math to get 1-X values
   byte blinkIndex;
   byte faceIndex;
   //now determine which blink this is coming off of
@@ -631,7 +627,7 @@ void colorConnections() {
         byte foundIndex = neighborsArr[f][ff] - 1;
         if (colorsArr[f][ff] == 0) { //we haven't made this connection yet!
           //put a random color there
-          byte connectionColor = rand(2) + 1;
+          byte connectionColor = random(2) + 1;
           colorsArr[f][ff] = connectionColor;
           FOREACH_FACE(fff) { //go through the faces of the connecting blink, find the connection to the current blink
             if (neighborsArr[foundIndex][fff] == f + 1) {//the connection on the found blink's face is the current blink
