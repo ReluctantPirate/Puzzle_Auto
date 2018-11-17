@@ -81,7 +81,7 @@ void loop() {
   buttonLongPressed();
 
   //set communications
-  FOREACH_FACE(f) {//[COMM][MODE][----][----][COLR][COLR]
+  FOREACH_FACE(f) {
     byte sendData = (gameMode << 2) + (faceColors[f]);
     setValueSentOnFace(sendData, f);
   }
