@@ -542,20 +542,12 @@ void makePuzzle() {
 
 void resetAll() {
   piecesPlaced = 0;
-  FOREACH_FACE(f) {
-    neighborsArr[0][f] = 0;
-    neighborsArr[1][f] = 0;
-    neighborsArr[2][f] = 0;
-    neighborsArr[3][f] = 0;
-    neighborsArr[4][f] = 0;
-    neighborsArr[5][f] = 0;
 
-    colorsArr[0][f] = 0;
-    colorsArr[1][f] = 0;
-    colorsArr[2][f] = 0;
-    colorsArr[3][f] = 0;
-    colorsArr[4][f] = 0;
-    colorsArr[5][f] = 0;
+  FOREACH_FACE(f) {
+    FOREACH_FACE(i) {
+      neighborsArr[f][i] = 0;
+      colorsArr[f][i] = 0;
+    }
   }
 }
 
@@ -661,25 +653,9 @@ byte nextCounterclockwise (byte face) {
 }
 
 byte getCurrentPiece () {
-  switch (piecesPlaced) {
-    case 0:
-      return (APIECE);
-      break;
-    case 1:
-      return (BPIECE);
-      break;
-    case 2:
-      return (CPIECE);
-      break;
-    case 3:
-      return (DPIECE);
-      break;
-    case 4:
-      return (EPIECE);
-      break;
-    case 5:
-      return (FPIECE);
-      break;
-
-  }
+  // Because a piece is represented by a value simply 1 greater than the pieces placed numner
+  // this is more efficient to compile than the original switch statement. I understand this
+  // is less clear to read, but it saves us needed space. Check the enum up top to understand
+  // that 0 should return PIECE_A and 1 should return PIECE_B (which are shifted by one)
+  return piecesPlaced + 1;
 }
