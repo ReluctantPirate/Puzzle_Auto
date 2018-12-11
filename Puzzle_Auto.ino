@@ -77,6 +77,7 @@ void loop() {
   }
 
   //clear button presses
+  buttonPressed();
   buttonDoubleClicked();
   buttonLongPressed();
 
@@ -114,7 +115,7 @@ void setupAutoLoop() {
     canBeginAlgorithm = false;
   }
 
-  if (buttonDoubleClicked() && canBeginAlgorithm == true) {//this lets us become the master blink
+  if (buttonPressed() && canBeginAlgorithm == true) {//this lets us become the master blink
     makePuzzle();//RUN THE ALGORITHM
     gameMode = PACKETREADY;
     canBeginAlgorithm = false;
@@ -199,7 +200,7 @@ void setupManualLoop() {
   }
 
   //look out for double clicks to start the game
-  if (buttonDoubleClicked() && !isAlone()) {//only works when connected
+  if (buttonPressed() && !isAlone()) {//only works when connected
     gameMode = LOCKING;
   }
 
