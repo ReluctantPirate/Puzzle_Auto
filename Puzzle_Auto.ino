@@ -200,7 +200,7 @@ void setupManualLoop() {
   }
 
   //look out for double clicks to start the game
-  if (buttonPressed() && !isAlone()) {//only works when connected
+  if (buttonDoubleClicked() && !isAlone()) {//only works when connected
     gameMode = LOCKING;
   }
 
