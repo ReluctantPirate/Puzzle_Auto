@@ -442,12 +442,12 @@ void sendPuzzlePackets(byte blankFace) {
   }
 
   //SEND PACKETS
-  sendPacketOnFace(0, (byte *) packet0, 6);
-  sendPacketOnFace(1, (byte *) packet1, 6);
-  sendPacketOnFace(2, (byte *) packet2, 6);
-  sendPacketOnFace(3, (byte *) packet3, 6);
-  sendPacketOnFace(4, (byte *) packet4, 6);
-  sendPacketOnFace(5, (byte *) packet5, 6);
+  FOREACH_FACE(f) {
+    FOREACH_FACE(ff) {
+      packet[f][ff] = colorsArr[f][ff];
+    }
+    sendPacketOnFace(f, (byte *) packet[f], 6);
+  }
 
   //assign self the correct info
   FOREACH_FACE(f) {
