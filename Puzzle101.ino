@@ -424,22 +424,7 @@ void communicationMasterLoop() {
 
 void sendPuzzlePackets(byte blankFace) {
   //declare packets
-  byte packet0[6];
-  byte packet1[6];
-  byte packet2[6];
-  byte packet3[6];
-  byte packet4[6];
-  byte packet5[6];
-
-  //fill packets
-  FOREACH_FACE(f) {
-    packet0[f] = colorsArr[0][f];
-    packet1[f] = colorsArr[1][f];
-    packet2[f] = colorsArr[2][f];
-    packet3[f] = colorsArr[3][f];
-    packet4[f] = colorsArr[4][f];
-    packet5[f] = colorsArr[5][f];
-  }
+  byte packet[6][6];
 
   //SEND PACKETS
   FOREACH_FACE(f) {
