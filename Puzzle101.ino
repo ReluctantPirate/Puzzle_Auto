@@ -431,7 +431,7 @@ void sendPuzzlePackets(byte blankFace) {
     FOREACH_FACE(ff) {
       packet[f][ff] = colorsArr[f][ff];
     }
-    sendPacketOnFace(f, (byte *) packet[f], 6);
+    sendDatagramOnFace((byte *) packet[f], 6, f);
   }
 
   //assign self the correct info
@@ -444,9 +444,9 @@ void communicationReceiverLoop() {
   if (gameMode == PACKETLISTENING) {
 
     //listen for a packet on master face
-    if (isPacketReadyOnFace(masterFace)) {//is there a packet?
-      if (getPacketLengthOnFace(masterFace) == 6) {//is it the right length?
-        byte *data = (byte *) getPacketDataOnFace(masterFace);//grab the data
+    if (isDatagramReadyOnFace(masterFace)) {//is there a packet?
+      if (getDatagramLengthOnFace(masterFace) == 6) {//is it the right length?
+        byte *data = (byte *) getDatagramOnFace(masterFace);//grab the data
         //fill our array with this data
         FOREACH_FACE(f) {
           faceColors[f] = data[f];
