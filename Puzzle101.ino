@@ -431,7 +431,7 @@ void sendPuzzlePackets(byte blankFace) {
     FOREACH_FACE(ff) {
       packet[f][ff] = colorsArr[f][ff];
     }
-    sendDatagramOnFace((byte *) packet[f], 6, f);
+    sendDatagramOnFace( &packet[f], sizeof(packet[f]), f);
   }
 
   //assign self the correct info
@@ -453,6 +453,9 @@ void communicationReceiverLoop() {
         }
         //let them know we heard them
         gameMode = PACKETRECEIVED;
+
+        // mark datagram as received
+        markDatagramReadOnFace(masterFace);
       }
     }
 
