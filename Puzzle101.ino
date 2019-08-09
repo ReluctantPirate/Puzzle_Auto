@@ -1,3 +1,20 @@
+/*
+ *  Puzzle101
+ *  by Move38, Inc. 2019
+ *  Lead development by Dan King
+ *  original game by Vanilla Liu, Dan King
+ *
+ *  Rules: https://github.com/Move38/Puzzle101/blob/master/README.md
+ *
+ *  --------------------
+ *  Blinks by Move38
+ *  Brought to life via Kickstarter 2018
+ *
+ *  @madewithblinks
+ *  www.move38.com
+ *  --------------------
+ */
+
 ////COMMUNICATION VARIABLES////
 enum gameModes {SETUPAUTO, PACKETREADY, PACKETSENDING, PACKETLISTENING, PACKETRECEIVED, GAMEAUTO, TOMANUAL, SETUPMANUAL, LOCKING, GAMEMANUAL, TOAUTO};
 byte gameMode = SETUPAUTO;
