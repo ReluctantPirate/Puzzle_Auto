@@ -36,7 +36,7 @@ Timer packetTimer;
 #define TIMEOUT_DURATION 700
 
 ////GAME VARIABLES////
-Color autoColors[5] = {OFF, RED, YELLOW, BLUE, WHITE};
+Color autoColors[5] = {OFF, makeColorRGB(255, 0, 128), makeColorRGB(255, 255, 0), makeColorRGB(0, 128, 255), WHITE};
 byte faceColors[6] = {0, 0, 0, 0, 0, 0};
 byte faceBrightness[6] = {0, 0, 0, 0, 0, 0};
 byte colorDim = 160;
