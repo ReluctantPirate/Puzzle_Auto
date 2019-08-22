@@ -164,6 +164,7 @@ void gameLoop() {
 
     } else {//no neighbor
       faceBrightness[f] = colorDim;
+      faceSolved[f] = false;
     }
   }
 
