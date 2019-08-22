@@ -39,8 +39,16 @@ Timer packetTimer;
 Color autoColors[5] = {OFF, makeColorRGB(255, 0, 128), makeColorRGB(255, 255, 0), makeColorRGB(0, 128, 255), WHITE};
 byte faceColors[6] = {0, 0, 0, 0, 0, 0};
 byte faceBrightness[6] = {0, 0, 0, 0, 0, 0};
+byte faceSolved[6];
 byte colorDim = 160;
 byte whiteDim = 64;
+
+// SYNCHRONIZED CELEBRATION
+Timer syncTimer;
+#define PERIOD_DURATION 2000
+#define BUFFER_DURATION 200
+byte neighborState[6];
+byte syncVal = 0;
 
 void setup() {
   randomize();
@@ -79,7 +87,7 @@ void loop() {
 
   //set communications
   FOREACH_FACE(f) {
-    byte sendData = (gameMode << 2) + (faceColors[f]);
+    byte sendData = (syncVal << 5) + (gameMode << 2) + (faceColors[f]);
     setValueSentOnFace(sendData, f);
   }
 }
@@ -141,8 +149,10 @@ void gameLoop() {
       byte neighborColor = getColorInfo(neighborData);
       if (neighborColor == faceColors[f]) { //hey, a match!
         faceBrightness[f] = 255;
+        faceSolved[f] = true;
       } else {//no match :(
         faceBrightness[f] = colorDim;
+        faceSolved[f] = false;
       }
 
       //look for neighbors turning us back to setup
@@ -185,10 +195,17 @@ void assembleDisplay() {
 }
 
 void gameDisplay() {
+  
   Color displayColor;
   FOREACH_FACE(f) {
     displayColor = autoColors[faceColors[f]];
-    byte displayBrightness = faceBrightness[f];
+    byte displayBrightness;
+    if(faceSolved[f]) {
+      displayBrightness = sin8_C(millis()/8);
+    }
+    else {
+      displayBrightness = 255;
+    }
     setColorOnFace(dim(displayColor, displayBrightness), f);
   }
 }
@@ -305,8 +322,12 @@ void communicationReceiverLoop() {
   }
 }
 
+byte getSyncVal(byte data) {
+  return (data >> 5) & 1;
+}
+
 byte getGameMode(byte data) {
-  return (data >> 2);//1st, 2nd, 3rd, and 4th bits
+  return (data >> 2) & 7;//1st, 2nd, 3rd, and 4th bits
 }
 
 byte getColorInfo(byte data) {
