@@ -78,6 +78,7 @@ void loop() {
       break;
     case GAMEAUTO:
       gameLoop();
+      syncLoop();
       gameDisplay();
       break;
   }
@@ -196,13 +197,13 @@ void assembleDisplay() {
 }
 
 void gameDisplay() {
-  
+
   Color displayColor;
   FOREACH_FACE(f) {
     displayColor = autoColors[faceColors[f]];
     byte displayBrightness;
-    if(faceSolved[f]) {
-      displayBrightness = sin8_C(millis()/8);
+    if (faceSolved[f]) {
+      displayBrightness = sin8_C(map(syncTimer.getRemaining(), 0, PERIOD_DURATION, 0, 255));
     }
     else {
       displayBrightness = 255;
@@ -498,4 +499,44 @@ byte getCurrentPiece () {
   // is less clear to read, but it saves us needed space. Check the enum up top to understand
   // that 0 should return PIECE_A and 1 should return PIECE_B (which are shifted by one)
   return piecesPlaced + 1;
+}
+
+/*
+ * Keep ourselves on the same time loop as our neighbors
+ * if a neighbor passed go, 
+ * we want to pass go as well 
+ * (if we didn't just pass go)
+ * ... or collect $200
+ */
+void syncLoop() {
+
+  bool didNeighborChange = false;
+
+  // look at our neighbors to determine if one of them passed go (changed value)
+  // note: absent neighbors changing to not absent don't count
+  FOREACH_FACE(f) {
+    if (isValueReceivedOnFaceExpired(f)) {
+      neighborState[f] = 2; // this is an absent neighbor
+    }
+    else {
+      byte data = getLastValueReceivedOnFace(f);
+      if (neighborState[f] != 2) {  // wasn't absent
+        if (getSyncVal(data) != neighborState[f]) { // passed go (changed value)
+          didNeighborChange = true;
+        }
+      }
+
+      neighborState[f] = getSyncVal(data);  // update our record of state now that we've check it
+    }
+  }
+
+  // if our neighbor passed go and we haven't done so within the buffer period, catch up and pass go as well
+  // if we are due to pass go, i.e. timer expired, do so
+  if ( (didNeighborChange && syncTimer.getRemaining() < PERIOD_DURATION - BUFFER_DURATION)
+       || syncTimer.isExpired()
+     ) {
+
+    syncTimer.set(PERIOD_DURATION); // aim to pass go in the defined duration
+    syncVal = !syncVal; // change our value everytime we pass go
+  }
 }
